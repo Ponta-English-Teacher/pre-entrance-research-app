@@ -1,8 +1,8 @@
-// src/components/Stage3Screen.jsx
+// src/pages/Stage3Screen.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase, updateStage3Data } from "../supabaseClient";
 
-function Stage3Screen({ topic, onBack, onLogout }) {
+function Stage3Screen({ topic, onBack, onLogout, onNextStage }) {
   if (!topic) {
     return (
       <div
@@ -53,7 +53,7 @@ function Stage3Screen({ topic, onBack, onLogout }) {
   const [isGenerating, setIsGenerating] = useState(false);
 
   // TTS state
-  // ✅ FIX: Azure SSML voice names (Vercel /api/tts.js expects these, not "alloy")
+  // ✅ Azure voice names
   const [voiceChoice, setVoiceChoice] = useState("en-US-JennyNeural");
   const [isPlayingTTS, setIsPlayingTTS] = useState(false);
 
@@ -375,6 +375,14 @@ function Stage3Screen({ topic, onBack, onLogout }) {
     setMeaningExplanation("");
   }
 
+  function goNextStage() {
+    if (typeof onNextStage === "function") {
+      onNextStage();
+      return;
+    }
+    alert("Stage 4 is not wired yet. (onNextStage is missing)");
+  }
+
   return (
     <div
       style={{
@@ -572,7 +580,6 @@ function Stage3Screen({ topic, onBack, onLogout }) {
             onChange={(e) => setVoiceChoice(e.target.value)}
             style={{ fontSize: "0.9rem", padding: "4px 6px" }}
           >
-            {/* ✅ FIX: Azure voice names */}
             <option value="en-US-JennyNeural">en-US-JennyNeural (US Female)</option>
             <option value="en-US-GuyNeural">en-US-GuyNeural (US Male)</option>
             <option value="en-GB-LibbyNeural">en-GB-LibbyNeural (UK Female)</option>
@@ -838,7 +845,7 @@ function Stage3Screen({ topic, onBack, onLogout }) {
       </div>
 
       {/* Save buttons */}
-      <div style={{ marginBottom: "40px" }}>
+      <div style={{ marginBottom: "40px", display: "flex", flexWrap: "wrap", gap: "10px" }}>
         <button
           type="button"
           onClick={saveLocal}
@@ -868,14 +875,30 @@ function Stage3Screen({ topic, onBack, onLogout }) {
             cursor: "pointer",
             fontSize: "1rem",
             fontWeight: 700,
-            marginLeft: "10px",
           }}
         >
           Save to Supabase
         </button>
 
+        <button
+          type="button"
+          onClick={goNextStage}
+          style={{
+            padding: "10px 16px",
+            borderRadius: "10px",
+            border: "none",
+            background: "#059669",
+            color: "white",
+            cursor: "pointer",
+            fontSize: "1rem",
+            fontWeight: 800,
+          }}
+        >
+          Go to Next Stage →
+        </button>
+
         {savedMessage && (
-          <span style={{ marginLeft: "12px", fontSize: "0.95rem", color: "#059669" }}>
+          <span style={{ fontSize: "0.95rem", color: "#059669", alignSelf: "center" }}>
             {savedMessage}
           </span>
         )}
