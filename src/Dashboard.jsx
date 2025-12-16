@@ -29,9 +29,6 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [planError, setPlanError] = useState("");
 
-  // Stage 3 – which topic is selected for the next stage
-  const [selectedTopic, setSelectedTopic] = useState(null);
-
   const userId = user?.id ?? null;
 
   // Load topics for the logged-in user
@@ -67,17 +64,14 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
         return;
       }
 
-      const resp = await fetch(
-        "http://localhost:3001/api/research-questions",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-          topicTitle: title,
+      const resp = await fetch("/api/generate-research-questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: title,
           keywords,
-}),
-        }
-      );
+        }),
+      });
 
       if (!resp.ok) {
         const errJson = await resp.json().catch(() => ({}));
@@ -89,13 +83,14 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
       // Accept either { questions: [...] } or { suggestions: [...] }
       const list = data.questions || data.suggestions || [];
       setAiQuestions(list);
-      if (list.length === 0) {
+
+      if (!Array.isArray(list) || list.length === 0) {
         setQuestionsError("AI did not return any questions.");
       }
     } catch (err) {
       console.error("AI request error:", err);
       setQuestionsError(
-        "Could not reach the AI server. Please check if `node api/generate-questions.js` is running."
+        "Could not reach the AI server. Please check your deployment / API routes."
       );
     } finally {
       setLoadingQuestions(false);
@@ -119,15 +114,15 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
         return;
       }
 
-const resp = await fetch("/api/generate-research-questions", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    topic: title,
-    keywords,
-    researchTopic,
-  }),
-});
+      const resp = await fetch("/api/generate-article-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: title,
+          keywords,
+          researchTopic,
+        }),
+      });
 
       if (!resp.ok) {
         const errJson = await resp.json().catch(() => ({}));
@@ -150,12 +145,10 @@ const resp = await fetch("/api/generate-research-questions", {
       }
 
       setResearchPlan(planText);
-      setArticleTitles(titles);
+      setArticleTitles(Array.isArray(titles) ? titles : []);
     } catch (err) {
       console.error("AI article plan error:", err);
-      setPlanError(
-        "Could not reach the AI server for article plan. Please check if `node api/generate-questions.js` is running."
-      );
+      setPlanError("Could not reach the AI server for article plan.");
     } finally {
       setLoadingPlan(false);
     }
@@ -164,6 +157,7 @@ const resp = await fetch("/api/generate-research-questions", {
   // Save everything into Supabase
   async function handleSaveArticlePlan(e) {
     e.preventDefault();
+
     if (!userId) {
       alert("No logged-in user. Please log in again.");
       return;
@@ -174,7 +168,7 @@ const resp = await fetch("/api/generate-research-questions", {
       return;
     }
 
-    const cleanedTitles = articleTitles.map((t) => t.trim()).filter(Boolean);
+    const cleanedTitles = (articleTitles || []).map((t) => (t || "").trim()).filter(Boolean);
 
     if (!researchPlan.trim() || cleanedTitles.length === 0) {
       const ok = window.confirm(
@@ -221,6 +215,8 @@ const resp = await fetch("/api/generate-research-questions", {
     setAiQuestions([]);
     setResearchPlan("");
     setArticleTitles([]);
+    setQuestionsError("");
+    setPlanError("");
   }
 
   function handleUseQuestion(q) {
@@ -229,7 +225,7 @@ const resp = await fetch("/api/generate-research-questions", {
 
   function handleTitleChange(index, value) {
     setArticleTitles((prev) => {
-      const copy = [...prev];
+      const copy = Array.isArray(prev) ? [...prev] : [];
       copy[index] = value;
       return copy;
     });
@@ -265,8 +261,7 @@ const resp = await fetch("/api/generate-research-questions", {
             Pre-Entrance Research Dashboard
           </h1>
           <p style={{ margin: 0, fontSize: "0.95rem", color: "#555" }}>
-            Step 2: Decide your research question, then create a research plan
-            and 10 article titles.
+            Step 2: Decide your research question, then create a research plan and 10 article titles.
           </p>
         </div>
         {onLogout && (
@@ -288,9 +283,8 @@ const resp = await fetch("/api/generate-research-questions", {
 
       {/* Stage 1 description */}
       <p style={{ marginBottom: "24px" }}>
-        <strong>Stage 1.</strong> First, decide your research topic. Then give a
-        few keywords so AI can suggest possible research questions. Choose one,
-        edit the English, and save it as your topic.
+        <strong>Stage 1.</strong> First, decide your research topic. Then give a few keywords so AI can suggest possible
+        research questions. Choose one, edit the English, and save it as your topic.
       </p>
 
       {/* TOPIC TITLE */}
@@ -345,9 +339,7 @@ const resp = await fetch("/api/generate-research-questions", {
         {loadingQuestions ? "Asking AI..." : "Ask AI for Research Questions"}
       </button>
 
-      {questionsError && (
-        <p style={{ color: "red", marginBottom: "12px" }}>{questionsError}</p>
-      )}
+      {questionsError && <p style={{ color: "red", marginBottom: "12px" }}>{questionsError}</p>}
 
       {/* AI questions list */}
       {aiQuestions.length > 0 && (
@@ -409,9 +401,8 @@ const resp = await fetch("/api/generate-research-questions", {
         />
 
         <p style={{ marginBottom: "8px" }}>
-          <strong>Stage 2.</strong> After you decide your final research
-          question, ask AI to create a short research plan and 10 article
-          titles. You can edit them and then save everything.
+          <strong>Stage 2.</strong> After you decide your final research question, ask AI to create a short research plan
+          and 10 article titles. You can edit them and then save everything.
         </p>
 
         <button
@@ -429,14 +420,10 @@ const resp = await fetch("/api/generate-research-questions", {
             cursor: "pointer",
           }}
         >
-          {loadingPlan
-            ? "Generating Article Plan..."
-            : "Generate Article Plan (10 Titles)"}
+          {loadingPlan ? "Generating Article Plan..." : "Generate Article Plan (10 Titles)"}
         </button>
 
-        {planError && (
-          <p style={{ color: "red", marginBottom: "12px" }}>{planError}</p>
-        )}
+        {planError && <p style={{ color: "red", marginBottom: "12px" }}>{planError}</p>}
 
         {(researchPlan || articleTitles.length > 0) && (
           <div
@@ -447,9 +434,7 @@ const resp = await fetch("/api/generate-research-questions", {
               marginBottom: "16px",
             }}
           >
-            <label
-              style={{ display: "block", fontWeight: 600, marginBottom: 4 }}
-            >
+            <label style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
               Research Plan (short paragraph)
             </label>
             <textarea
@@ -464,9 +449,7 @@ const resp = await fetch("/api/generate-research-questions", {
               }}
             />
 
-            <label
-              style={{ display: "block", fontWeight: 600, marginBottom: 4 }}
-            >
+            <label style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
               10 Article Titles (you can edit them)
             </label>
             <ol style={{ paddingLeft: "20px", margin: 0 }}>
@@ -548,40 +531,6 @@ const resp = await fetch("/api/generate-research-questions", {
             </li>
           ))}
         </ul>
-      )}
-
-      {selectedTopic && (
-        <div
-          style={{
-            marginTop: "24px",
-            paddingTop: "16px",
-            borderTop: "1px solid #e5e7eb",
-          }}
-        >
-          <h2 style={{ fontSize: "1.4rem", marginBottom: "8px" }}>
-            Stage 3 (Preview) – {selectedTopic.title}
-          </h2>
-
-          <p style={{ marginBottom: "8px" }}>Final research question:</p>
-
-          <p
-            style={{
-              marginBottom: "12px",
-              padding: "8px 10px",
-              backgroundColor: "#f3f4f6",
-              borderRadius: "6px",
-            }}
-          >
-            {selectedTopic.research_topic ||
-              "No research question saved yet."}
-          </p>
-
-          <p style={{ fontSize: "0.9rem", color: "#4b5563" }}>
-            This area will become your Stage 3 work area where students
-            will read AI-generated articles, write summaries, key findings,
-            glossary items, and sentence explanations.
-          </p>
-        </div>
       )}
     </div>
   );
