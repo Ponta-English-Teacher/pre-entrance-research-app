@@ -31,7 +31,7 @@ function Stage3Screen({ topic, onBack, onLogout }) {
     );
   }
 
-  const API_BASE = "http://localhost:3001";
+  const API_BASE = "";
 
   // 10 article titles from article_plan
   const titles = topic.article_plan?.titles || [];
