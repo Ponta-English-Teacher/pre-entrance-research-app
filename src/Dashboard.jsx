@@ -74,23 +74,21 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
       });
 
       if (!resp.ok) {
-        const errJson = await resp.json().catch(() => ({}));
-        throw new Error(errJson.error || "AI server error");
+        const errText = await resp.text().catch(() => "");
+        throw new Error(errText || "AI server error");
       }
 
-      const data = await resp.json();
-
-      // Accept either { questions: [...] } or { suggestions: [...] }
-      const list = data.questions || data.suggestions || [];
+      const data = await resp.json().catch(() => ({}));
+      const list = Array.isArray(data.questions) ? data.questions : [];
       setAiQuestions(list);
 
-      if (!Array.isArray(list) || list.length === 0) {
+      if (list.length === 0) {
         setQuestionsError("AI did not return any questions.");
       }
     } catch (err) {
       console.error("AI request error:", err);
       setQuestionsError(
-        "Could not reach the AI server. Please check your deployment / API routes."
+        "Could not reach the AI server on Vercel. Please check Vercel env var OPENAI_API_KEY and the /api endpoints."
       );
     } finally {
       setLoadingQuestions(false);
@@ -125,30 +123,28 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
       });
 
       if (!resp.ok) {
-        const errJson = await resp.json().catch(() => ({}));
-        throw new Error(errJson.error || "AI server error");
+        const errText = await resp.text().catch(() => "");
+        throw new Error(errText || "AI server error");
       }
 
-      const data = await resp.json();
-      const planText = data.research_plan || "";
-      const titles = data.titles || [];
+      const data = await resp.json().catch(() => ({}));
+      const planText = typeof data.research_plan === "string" ? data.research_plan : "";
+      const titles = Array.isArray(data.titles) ? data.titles : [];
 
-      if (!planText) {
-        setPlanError("AI did not return a research plan.");
-      }
-      if (!Array.isArray(titles) || titles.length === 0) {
+      if (!planText) setPlanError("AI did not return a research plan.");
+      if (!titles.length) {
         setPlanError((prev) =>
-          prev
-            ? prev + " AI did not return article titles."
-            : "AI did not return article titles."
+          prev ? prev + " AI did not return article titles." : "AI did not return article titles."
         );
       }
 
       setResearchPlan(planText);
-      setArticleTitles(Array.isArray(titles) ? titles : []);
+      setArticleTitles(titles);
     } catch (err) {
       console.error("AI article plan error:", err);
-      setPlanError("Could not reach the AI server for article plan.");
+      setPlanError(
+        "Could not reach the AI server on Vercel for article plan. Please check Vercel env var OPENAI_API_KEY and the /api endpoints."
+      );
     } finally {
       setLoadingPlan(false);
     }
@@ -157,7 +153,6 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
   // Save everything into Supabase
   async function handleSaveArticlePlan(e) {
     e.preventDefault();
-
     if (!userId) {
       alert("No logged-in user. Please log in again.");
       return;
@@ -168,7 +163,7 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
       return;
     }
 
-    const cleanedTitles = (articleTitles || []).map((t) => (t || "").trim()).filter(Boolean);
+    const cleanedTitles = articleTitles.map((t) => String(t).trim()).filter(Boolean);
 
     if (!researchPlan.trim() || cleanedTitles.length === 0) {
       const ok = window.confirm(
@@ -195,11 +190,9 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
       return;
     }
 
-    // Prepend new record to the list
     if (data && Array.isArray(data) && data[0]) {
       setTopics((prev) => [data[0], ...prev]);
     } else {
-      // Reload from server as a fallback
       const { data: fresh } = await supabase
         .from("topics")
         .select("*")
@@ -208,15 +201,12 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
       setTopics(fresh || []);
     }
 
-    // Clear fields for the next topic
     setTitle("");
     setKeywords("");
     setResearchTopic("");
     setAiQuestions([]);
     setResearchPlan("");
     setArticleTitles([]);
-    setQuestionsError("");
-    setPlanError("");
   }
 
   function handleUseQuestion(q) {
@@ -225,7 +215,7 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
 
   function handleTitleChange(index, value) {
     setArticleTitles((prev) => {
-      const copy = Array.isArray(prev) ? [...prev] : [];
+      const copy = [...prev];
       copy[index] = value;
       return copy;
     });
@@ -240,7 +230,6 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
         fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
-      {/* Header + logout */}
       <div
         style={{
           display: "flex",
@@ -281,13 +270,11 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
         )}
       </div>
 
-      {/* Stage 1 description */}
       <p style={{ marginBottom: "24px" }}>
-        <strong>Stage 1.</strong> First, decide your research topic. Then give a few keywords so AI can suggest possible
-        research questions. Choose one, edit the English, and save it as your topic.
+        <strong>Stage 1.</strong> First, decide your research topic. Then give a few keywords so AI can
+        suggest possible research questions. Choose one, edit the English, and save it as your topic.
       </p>
 
-      {/* TOPIC TITLE */}
       <label style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
         Topic title (short phrase)
       </label>
@@ -296,15 +283,9 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
         placeholder="Examples: Jazz in Japan, Anime tourism, Coffee shops in Sapporo"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        style={{
-          width: "100%",
-          padding: "10px",
-          marginBottom: "16px",
-          fontSize: "16px",
-        }}
+        style={{ width: "100%", padding: "10px", marginBottom: "16px", fontSize: "16px" }}
       />
 
-      {/* KEYWORDS */}
       <label style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
         Keywords (to help AI)
       </label>
@@ -313,12 +294,7 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
         placeholder="Give 3–5 keywords, separated by commas."
         value={keywords}
         onChange={(e) => setKeywords(e.target.value)}
-        style={{
-          width: "100%",
-          padding: "10px",
-          marginBottom: "12px",
-          fontSize: "16px",
-        }}
+        style={{ width: "100%", padding: "10px", marginBottom: "12px", fontSize: "16px" }}
       />
 
       <button
@@ -341,7 +317,6 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
 
       {questionsError && <p style={{ color: "red", marginBottom: "12px" }}>{questionsError}</p>}
 
-      {/* AI questions list */}
       {aiQuestions.length > 0 && (
         <div
           style={{
@@ -382,7 +357,6 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
         </div>
       )}
 
-      {/* FINAL RESEARCH TOPIC / QUESTION + Stage 2 + Save */}
       <form onSubmit={handleSaveArticlePlan} style={{ marginBottom: "30px" }}>
         <label style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
           Research Topic / Final Research Question
@@ -401,8 +375,8 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
         />
 
         <p style={{ marginBottom: "8px" }}>
-          <strong>Stage 2.</strong> After you decide your final research question, ask AI to create a short research plan
-          and 10 article titles. You can edit them and then save everything.
+          <strong>Stage 2.</strong> After you decide your final research question, ask AI to create a short
+          research plan and 10 article titles. You can edit them and then save everything.
         </p>
 
         <button
@@ -459,11 +433,7 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
                     type="text"
                     value={t}
                     onChange={(e) => handleTitleChange(idx, e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "6px 8px",
-                      fontSize: "14px",
-                    }}
+                    style={{ width: "100%", padding: "6px 8px", fontSize: "14px" }}
                   />
                 </li>
               ))}
@@ -488,7 +458,6 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
         </button>
       </form>
 
-      {/* TOPIC LIST */}
       <h2 style={{ fontSize: "1.5rem", marginBottom: "12px" }}>Your Topics</h2>
 
       {topics.length === 0 ? (
