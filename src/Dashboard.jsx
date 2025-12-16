@@ -119,18 +119,15 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
         return;
       }
 
-      const resp = await fetch(
-        "http://localhost:3001/api/generate-article-plan",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            topic: title,
-            keywords,
-            researchTopic,
-          }),
-        }
-      );
+const resp = await fetch("/api/generate-research-questions", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    topic: title,
+    keywords,
+    researchTopic,
+  }),
+});
 
       if (!resp.ok) {
         const errJson = await resp.json().catch(() => ({}));
