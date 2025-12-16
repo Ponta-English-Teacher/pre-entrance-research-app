@@ -1,3 +1,4 @@
+// api/generate-stage4.js
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
@@ -13,58 +14,81 @@ export default async function handler(req, res) {
       glossaryAll = "",
     } = req.body || {};
 
+    const safeTitles = Array.isArray(articleTitles) ? articleTitles : [];
+
     const prompt = `
-You are helping a Japanese university student prepare a SHORT English presentation (5–7 slides).
-The student will paste your output into Gamma or Felo.
+You are helping a Japanese university student create a SHORT presentation (5–7 slides) for "Pre-Entrance Research".
+The student already wrote some parts (key findings, summaries, glossary). You MUST use them if they exist.
+
+OUTPUT FORMAT (MUST follow exactly):
+SLIDE_IDEA
+Slide 1: ...
+Slide 2: ...
+Slide 3: ...
+Slide 4: ...
+Slide 5: ...
+(Optionally Slide 6 or 7)
+
+IMAGE_PROMPTS
+Slide 1 image prompt: ...
+Slide 2 image prompt: ...
+Slide 3 image prompt: ...
+Slide 4 image prompt: ...
+Slide 5 image prompt: ...
+(Optionally Slide 6 or 7)
+
+NARRATION
+Slide 1 narration: ...
+Slide 2 narration: ...
+Slide 3 narration: ...
+Slide 4 narration: ...
+Slide 5 narration: ...
+(Optionally Slide 6 or 7)
 
 RULES:
-- Use the student's writing as the main source. Do NOT invent new factual claims.
-- Make it easy to read and copy-paste.
-- Output MUST be exactly TWO blocks, in this order:
-  1) SLIDE_IDEA
-  2) NARRATION
-- Slide idea must clearly label "Slide 1:", "Slide 2:", ...
-- Each slide MUST include "Image idea:" inside the slide.
-- Narration MUST clearly label "Slide 1 narration:", "Slide 2 narration:", ...
-- Narration should reflect student ideas (especially in Key Findings).
-- Tone: clear, simple, informative (B1–B2). Not too long.
+- Slide Idea must be Gamma/Felo-friendly (clear bullet structure).
+- Narration MUST explicitly say "Slide 1", "Slide 2", etc.
+- Narration must be informative (not empty greetings only).
+- If student findings exist, weave them into Slide 2–4 narration naturally.
+- Keep English simple and clear for learners (B1-B2).
+- Do NOT ask the user for missing info. Just do your best with what you have.
+- No Markdown.
 
-TOPIC:
-- Topic title: ${topicTitle}
-- Research question: ${researchQuestion}
+INPUT DATA:
+Topic title:
+${topicTitle}
 
-ARTICLE TITLES (reference only):
-${(articleTitles || []).map((t, i) => `${i + 1}. ${t}`).join("\n")}
+Research question:
+${researchQuestion}
 
-STUDENT KEY FINDINGS (keep their ideas; rewrite for clarity if needed):
+Article titles (10):
+${safeTitles.map((t, i) => `${i + 1}. ${t}`).join("\n")}
+
+Student key findings (all articles, raw):
 ${keyFindingsAll}
 
-STUDENT SUMMARIES (use for "interesting/surprising points" if useful):
+Student summaries (all articles, raw):
 ${summariesAll}
 
-STUDENT GLOSSARY (pick important terms; you may clean duplicates):
+Student glossary (all articles, raw):
 ${glossaryAll}
-
-Now produce the TWO blocks.
 `.trim();
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "Missing OPENAI_API_KEY on server." });
+    }
 
     const openaiResp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        model: "gpt-4o-mini",
         temperature: 0.4,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You create slide plans and narration for students. Follow the required output format exactly.",
-          },
-          { role: "user", content: prompt },
-        ],
+        messages: [{ role: "user", content: prompt }],
       }),
     });
 
@@ -74,16 +98,26 @@ Now produce the TWO blocks.
     }
 
     const text = json?.choices?.[0]?.message?.content || "";
-    const slideIdeaMatch = text.match(/SLIDE_IDEA\s*([\s\S]*?)\s*NARRATION\s*([\s\S]*)/);
-    if (!slideIdeaMatch) {
-      // If the model didn’t follow the format, still return raw text for debugging.
-      return res.status(200).json({ slideIdea: text, narration: "" });
+
+    // Parse sections
+    const match = text.match(
+      /SLIDE_IDEA\s*([\s\S]*?)\s*IMAGE_PROMPTS\s*([\s\S]*?)\s*NARRATION\s*([\s\S]*)/i
+    );
+
+    if (!match) {
+      // Return raw text for debugging if formatting failed
+      return res.status(200).json({
+        slideIdea: text,
+        imagePrompts: "",
+        narration: "",
+      });
     }
 
-    const slideIdea = slideIdeaMatch[1].trim();
-    const narration = slideIdeaMatch[2].trim();
+    const slideIdea = match[1].trim();
+    const imagePrompts = match[2].trim();
+    const narration = match[3].trim();
 
-    return res.status(200).json({ slideIdea, narration });
+    return res.status(200).json({ slideIdea, imagePrompts, narration });
   } catch (e) {
     console.error("generate-stage4 error:", e);
     return res.status(500).json({ error: e?.message || "Server error" });
