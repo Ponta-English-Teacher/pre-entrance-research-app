@@ -1,21 +1,10 @@
 // api/tts.js
-// POST /api/tts
-// Body: { text: "...", voice?: "en-US-JennyNeural", rate?: "0%" }
-// Returns: audio/mpeg (mp3)
-
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const { text, voice, rate } = req.body || {};
-    const t = (text || "").toString().trim();
-
-    if (!t) {
-      return res.status(400).json({ error: "Missing text" });
-    }
-
     const key = process.env.AZURE_SPEECH_KEY;
     const region = process.env.AZURE_SPEECH_REGION;
 
@@ -25,22 +14,29 @@ export default async function handler(req, res) {
         .json({ error: "AZURE_SPEECH_KEY / AZURE_SPEECH_REGION not set" });
     }
 
-    const v = (voice || "en-US-JennyNeural").toString();
-    const r = (rate || "0%").toString(); // e.g. "0%", "-10%"
+    const { text, voice, rate } = req.body || {};
+    const input = (text || "").toString().trim();
 
-    // Basic SSML
+    if (!input) {
+      return res.status(400).json({ error: "Missing text" });
+    }
+
+    // Default voice (change anytime)
+    const voiceName = (voice || "en-US-JennyNeural").toString();
+
+    // rate examples: "0%" (normal), "-15%" (slow)
+    const prosodyRate = (rate || "0%").toString();
+
     const ssml =
       `<speak version="1.0" xml:lang="en-US">` +
-      `<voice name="${v}">` +
-      `<prosody rate="${r}">` +
-      escapeXml(t) +
-      `</prosody>` +
+      `<voice name="${voiceName}">` +
+      `<prosody rate="${prosodyRate}">${escapeXml(input)}</prosody>` +
       `</voice>` +
       `</speak>`;
 
     const url = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
 
-    const resp = await fetch(url, {
+    const azureResp = await fetch(url, {
       method: "POST",
       headers: {
         "Ocp-Apim-Subscription-Key": key,
@@ -51,21 +47,21 @@ export default async function handler(req, res) {
       body: ssml,
     });
 
-    if (!resp.ok) {
-      const msg = await resp.text().catch(() => "");
-      console.error("Azure TTS error:", resp.status, msg);
+    if (!azureResp.ok) {
+      const errText = await azureResp.text().catch(() => "");
+      console.error("Azure TTS error:", azureResp.status, errText);
       return res.status(500).json({ error: "Azure TTS failed" });
     }
 
-    const arrayBuf = await resp.arrayBuffer();
-    const buf = Buffer.from(arrayBuf);
+    const arrayBuffer = await azureResp.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Cache-Control", "no-store");
-    return res.status(200).send(buf);
+    return res.status(200).send(buffer);
   } catch (err) {
-    console.error("TTS API error:", err);
-    return res.status(500).json({ error: "TTS server error" });
+    console.error("tts error:", err);
+    return res.status(500).json({ error: "Server error in /api/tts" });
   }
 }
 
@@ -77,3 +73,4 @@ function escapeXml(s) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
 }
+

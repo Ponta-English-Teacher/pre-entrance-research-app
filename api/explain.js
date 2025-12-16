@@ -1,11 +1,5 @@
 // api/explain.js
-// POST /api/explain
-// Body: { text: "..." }
-// Returns: { en: "...", ja: "..." }
-
 import OpenAI from "openai";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -13,57 +7,64 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { text } = req.body || {};
-    const t = (text || "").toString().trim();
+    const { text, lang } = req.body || {};
 
-    if (!t) {
+    if (!text || !String(text).trim()) {
       return res.status(400).json({ error: "Missing text" });
     }
+
     if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: "OPENAI_API_KEY is not set" });
+      return res
+        .status(500)
+        .json({ error: "OPENAI_API_KEY is not set on the server" });
     }
+
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+    const targetLang = lang === "ja" ? "ja" : "ja"; // keep JA default
+    const input = String(text).trim();
 
     const messages = [
       {
         role: "system",
         content:
-          "You are a helpful English tutor for Japanese students (CEFR B1). " +
-          "Given an English word/phrase/sentence, return (1) a very simple English paraphrase and (2) a natural Japanese translation. " +
-          "Keep both short and clear.",
+          "You are a helpful English tutor for Japanese university students (CEFR B1). " +
+          "Explain meaning simply and clearly.",
       },
       {
         role: "user",
         content:
-          `Text: "${t}"\n\n` +
-          "Return ONLY this JSON format:\n" +
-          '{"en":"simple paraphrase in easy English","ja":"natural Japanese translation"}',
+          `Text:\n"${input}"\n\n` +
+          "Return ONLY JSON in this format:\n" +
+          '{"en_simple":"...", "ja":"..."}\n\n' +
+          "- en_simple: very simple paraphrase in easy English (B1).\n" +
+          `- ja: natural Japanese translation (${targetLang}).\n` +
+          "- Do not add extra keys. Do not add markdown.",
       },
     ];
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages,
-      temperature: 0.2,
+      temperature: 0.3,
     });
 
     const raw = completion.choices?.[0]?.message?.content ?? "";
 
-    let en = "";
-    let ja = "";
-
+    let out = null;
     try {
-      const parsed = JSON.parse(raw);
-      en = (parsed.en || "").toString().trim();
-      ja = (parsed.ja || "").toString().trim();
+      out = JSON.parse(raw);
     } catch {
-      // fallback (very rare): return raw as English
-      en = raw.toString().trim();
-      ja = "";
+      // fallback if model returns plain text
+      out = { en_simple: raw.trim(), ja: "" };
     }
 
-    return res.status(200).json({ en, ja });
+    return res.status(200).json({
+      en_simple: typeof out.en_simple === "string" ? out.en_simple : "",
+      ja: typeof out.ja === "string" ? out.ja : "",
+    });
   } catch (err) {
-    console.error("Explain API error:", err);
-    return res.status(500).json({ error: "Server error talking to OpenAI" });
+    console.error("explain error:", err);
+    return res.status(500).json({ error: "Server error in /api/explain" });
   }
 }
