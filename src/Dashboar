@@ -1,0 +1,145 @@
+import { useEffect, useState } from "react";
+import { supabase, insertTopic } from "./supabaseClient";
+
+export default function Dashboard() {
+  const [topics, setTopics] = useState([]);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [userId, setUserId] = useState(null);
+
+  // Get logged-in user ID
+  useEffect(() => {
+    async function getUser() {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
+
+      if (error) {
+        console.error("Error getting user:", error.message);
+        return;
+      }
+
+      if (user) {
+        setUserId(user.id);
+        loadTopics(user.id);
+      }
+    }
+    getUser();
+  }, []);
+
+  // Load topics for this student
+  async function loadTopics(uid) {
+    const { data, error } = await supabase
+      .from("topics")
+      .select("*")
+      .eq("user_id", uid)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("Error loading topics:", error.message);
+      return;
+    }
+
+    setTopics(data || []);
+  }
+
+  // Add Topic
+  async function handleAddTopic(e) {
+    e.preventDefault();
+
+    if (!title.trim()) {
+      alert("Please enter a topic title.");
+      return;
+    }
+
+    if (!userId) {
+      alert("User not found. Please log in again.");
+      return;
+    }
+
+    const { data, error } = await insertTopic({
+      title,
+      description,
+      user_id: userId,
+    });
+
+    if (error) {
+      alert("Error adding topic: " + error.message);
+      return;
+    }
+
+    setTitle("");
+    setDescription("");
+
+    await loadTopics(userId);
+  }
+
+  return (
+    <div style={{ maxWidth: "700px", margin: "40px auto" }}>
+      <h1>Pre-Entrance Research Dashboard</h1>
+
+      <p>Add your research topics here.</p>
+
+      {/* Add Topic Form */}
+      <form onSubmit={handleAddTopic} style={{ marginBottom: "30px" }}>
+        <input
+          type="text"
+          placeholder="Topic title (short phrase)"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          style={{
+            width: "100%",
+            padding: "10px",
+            marginBottom: "10px",
+            fontSize: "16px",
+          }}
+        />
+
+        <textarea
+          placeholder="Short description (optional)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          style={{
+            width: "100%",
+            padding: "10px",
+            height: "80px",
+            marginBottom: "10px",
+            fontSize: "16px",
+          }}
+        />
+
+        <button
+          type="submit"
+          style={{
+            width: "100%",
+            padding: "12px",
+            background: "#2563eb",
+            color: "white",
+            fontSize: "18px",
+            borderRadius: "8px",
+            cursor: "pointer",
+          }}
+        >
+          Add Topic
+        </button>
+      </form>
+
+      <h2>Your Topics</h2>
+
+      {topics.length === 0 ? (
+        <p>No topics yet.</p>
+      ) : (
+        <ul>
+          {topics.map((t) => (
+            <li key={t.id} style={{ marginBottom: "10px" }}>
+              <strong>{t.title}</strong>
+              <br />
+              {t.description}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
