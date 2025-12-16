@@ -31,8 +31,6 @@ function Stage3Screen({ topic, onBack, onLogout }) {
     );
   }
 
-  const API_BASE = "";
-
   // 10 article titles from article_plan
   const titles = topic.article_plan?.titles || [];
 
@@ -55,7 +53,8 @@ function Stage3Screen({ topic, onBack, onLogout }) {
   const [isGenerating, setIsGenerating] = useState(false);
 
   // TTS state
-  const [voiceChoice, setVoiceChoice] = useState("alloy");
+  // ✅ FIX: Azure SSML voice names (Vercel /api/tts.js expects these, not "alloy")
+  const [voiceChoice, setVoiceChoice] = useState("en-US-JennyNeural");
   const [isPlayingTTS, setIsPlayingTTS] = useState(false);
 
   // "What does it mean?"
@@ -204,7 +203,7 @@ function Stage3Screen({ topic, onBack, onLogout }) {
     setSavedMessage("");
 
     try {
-      const resp = await fetch(`${API_BASE}/api/generate-article`, {
+      const resp = await fetch("/api/generate-article", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -244,7 +243,7 @@ function Stage3Screen({ topic, onBack, onLogout }) {
       setTimeout(() => setSavedMessage(""), 2500);
     } catch (err) {
       console.error("Generate article error:", err);
-      alert("Could not generate article. Check Node server and /api/generate-article.");
+      alert("Could not generate article. Check /api/generate-article.");
     } finally {
       setIsGenerating(false);
     }
@@ -259,7 +258,7 @@ function Stage3Screen({ topic, onBack, onLogout }) {
 
     setIsPlayingTTS(true);
     try {
-      const resp = await fetch(`${API_BASE}/api/tts`, {
+      const resp = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -283,7 +282,7 @@ function Stage3Screen({ topic, onBack, onLogout }) {
       await audio.play();
     } catch (e) {
       console.error("TTS error:", e);
-      alert("Could not play TTS. Check Node server /api/tts.");
+      alert("Could not play TTS. Please try again.");
     } finally {
       setIsPlayingTTS(false);
     }
@@ -324,7 +323,7 @@ function Stage3Screen({ topic, onBack, onLogout }) {
 
     try {
       // /api/explain must return { en, ja }
-      const resp = await fetch(`${API_BASE}/api/explain`, {
+      const resp = await fetch("/api/explain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: selectionText }),
@@ -341,7 +340,7 @@ function Stage3Screen({ topic, onBack, onLogout }) {
       setMeaningExplanation([en, ja].filter(Boolean).join("\n"));
     } catch (e) {
       console.error("Ask meaning error:", e);
-      alert("Could not get meaning. Check Node server /api/explain.");
+      alert("Could not get meaning. Please try again.");
     } finally {
       setIsAskingMeaning(false);
     }
@@ -573,12 +572,11 @@ function Stage3Screen({ topic, onBack, onLogout }) {
             onChange={(e) => setVoiceChoice(e.target.value)}
             style={{ fontSize: "0.9rem", padding: "4px 6px" }}
           >
-            <option value="alloy">alloy</option>
-            <option value="aria">aria</option>
-            <option value="verse">verse</option>
-            <option value="sage">sage</option>
-            <option value="coral">coral</option>
-            <option value="ash">ash</option>
+            {/* ✅ FIX: Azure voice names */}
+            <option value="en-US-JennyNeural">en-US-JennyNeural (US Female)</option>
+            <option value="en-US-GuyNeural">en-US-GuyNeural (US Male)</option>
+            <option value="en-GB-LibbyNeural">en-GB-LibbyNeural (UK Female)</option>
+            <option value="en-GB-RyanNeural">en-GB-RyanNeural (UK Male)</option>
           </select>
 
           <button
@@ -607,7 +605,9 @@ function Stage3Screen({ topic, onBack, onLogout }) {
 
         <textarea
           value={articleTextToShow}
-          onChange={(e) => (version === "full" ? setFullText(e.target.value) : setSimpleText(e.target.value))}
+          onChange={(e) =>
+            version === "full" ? setFullText(e.target.value) : setSimpleText(e.target.value)
+          }
           onMouseUp={handleArticleSelection}
           onKeyUp={handleArticleSelection}
           onSelect={handleArticleSelection}
