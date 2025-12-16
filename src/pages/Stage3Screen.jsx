@@ -377,7 +377,7 @@ function Stage3Screen({ topic, onBack, onLogout, onNextStage }) {
 
   function goNextStage() {
     if (typeof onNextStage === "function") {
-      onNextStage();
+      onNextStage(topic);
       return;
     }
     alert("Stage 4 is not wired yet. (onNextStage is missing)");
