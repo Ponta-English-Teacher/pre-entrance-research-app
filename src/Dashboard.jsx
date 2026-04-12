@@ -228,6 +228,28 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
       return copy;
     });
   }
+  
+  async function handleDeleteTopic(topicId) {
+  const ok = window.confirm("Are you sure you want to delete this topic?");
+  if (!ok) return;
+
+  const { error } = await supabase
+    .from("topics")
+    .delete()
+    .eq("id", topicId)
+    .eq("user_id", userId);
+
+  if (error) {
+    alert("Error deleting topic: " + error.message);
+    return;
+  }
+
+  setTopics((prev) => prev.filter((topic) => topic.id !== topicId));
+
+  if (selectedTopic?.id === topicId) {
+    setSelectedTopic(null);
+  }
+}
 
   return (
     <div
@@ -519,22 +541,39 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
                 {t.research_topic || "(no research topic saved yet)"}
               </div>
 
-              <button
-                type="button"
-                onClick={() => onGoToStage3 && onGoToStage3(t)}
-                style={{
-                  marginTop: "8px",
-                  padding: "6px 10px",
-                  fontSize: "0.9rem",
-                  borderRadius: "6px",
-                  backgroundColor: "#2563eb",
-                  color: "white",
-                  border: "none",
-                  cursor: "pointer",
-                }}
-              >
-                Go to Next Stage
-              </button>
+              <div style={{ marginTop: "8px", display: "flex", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => onGoToStage3 && onGoToStage3(t)}
+                  style={{
+                    padding: "6px 10px",
+                    fontSize: "0.9rem",
+                    borderRadius: "6px",
+                    backgroundColor: "#2563eb",
+                    color: "white",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  Go to Next Stage
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDeleteTopic(t.id)}
+                  style={{
+                    padding: "6px 10px",
+                    fontSize: "0.9rem",
+                    borderRadius: "6px",
+                    backgroundColor: "#ef4444",
+                    color: "white",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
             </li>
           ))}
         </ul>
