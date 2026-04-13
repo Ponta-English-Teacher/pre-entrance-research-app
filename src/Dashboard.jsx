@@ -9,16 +9,22 @@ import { supabase, insertTopic } from "./supabaseClient";
  *          - a short research plan (CEFR B1)
  *          - 10 article titles
  * Finally, save everything into the `topics` table:
- *   title, research_topic, article_plan (JSONB).
+ *   user_id (= studentId), title, research_topic, article_plan (JSONB).
+ *
+ * Props:
+ *   studentId   — plain text student ID (e.g. "s12345"), used as user_id in DB
+ *   studentName — display name (e.g. "Tanaka Yuki")
+ *   onLogout    — called when student clicks logout
+ *   onGoToStage3 — called with a topic row to enter Stage 3
  */
-export default function Dashboard({ user, onLogout, onGoToStage3 }) {
+export default function Dashboard({ studentId, studentName, onLogout, onGoToStage3 }) {
   // Saved topics for this student
   const [topics, setTopics] = useState([]);
 
   // Stage 1 – topic & questions
   const [title, setTitle] = useState("");
   const [keywords, setKeywords] = useState("");
-  const [researchTopic, setResearchTopic] = useState(""); // final research question
+  const [researchTopic, setResearchTopic] = useState("");
   const [aiQuestions, setAiQuestions] = useState([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [questionsError, setQuestionsError] = useState("");
@@ -29,20 +35,15 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [planError, setPlanError] = useState("");
 
-  // Stage 3 – which topic is selected for the next stage
-  const [selectedTopic, setSelectedTopic] = useState(null);
-
-  const userId = user?.id ?? null;
-
-  // Load topics for the logged-in user
+  // Load topics for this student
   useEffect(() => {
-    if (!userId) return;
+    if (!studentId) return;
 
     async function loadTopics() {
       const { data, error } = await supabase
         .from("topics")
         .select("*")
-        .eq("user_id", userId)
+        .eq("user_id", studentId)
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -53,7 +54,7 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
     }
 
     loadTopics();
-  }, [userId]);
+  }, [studentId]);
 
   // === Stage 1: ask AI for research questions ===
   async function handleAskQuestions() {
@@ -70,10 +71,7 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
       const resp = await fetch("/api/generate-research-questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topic: title,
-          keywords,
-        }),
+        body: JSON.stringify({ topic: title, keywords }),
       });
 
       if (!resp.ok) {
@@ -118,11 +116,7 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
       const resp = await fetch("/api/generate-article-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topic: title,
-          keywords,
-          researchTopic,
-        }),
+        body: JSON.stringify({ topic: title, keywords, researchTopic }),
       });
 
       if (!resp.ok) {
@@ -137,9 +131,7 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
       if (!planText) setPlanError("AI did not return a research plan.");
       if (!Array.isArray(titles) || titles.length === 0) {
         setPlanError((prev) =>
-          prev
-            ? prev + " AI did not return article titles."
-            : "AI did not return article titles."
+          prev ? prev + " AI did not return article titles." : "AI did not return article titles."
         );
       }
 
@@ -158,8 +150,8 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
   // Save everything into Supabase
   async function handleSaveArticlePlan(e) {
     e.preventDefault();
-    if (!userId) {
-      alert("No logged-in user. Please log in again.");
+    if (!studentId) {
+      alert("No student ID found. Please log in again.");
       return;
     }
 
@@ -178,7 +170,7 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
     }
 
     const topicData = {
-      user_id: userId,
+      user_id: studentId,          // plain text student ID stored in user_id column
       title: title.trim(),
       research_topic: researchTopic.trim(),
       article_plan: researchPlan
@@ -203,7 +195,7 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
       const { data: fresh } = await supabase
         .from("topics")
         .select("*")
-        .eq("user_id", userId)
+        .eq("user_id", studentId)
         .order("created_at", { ascending: false });
       setTopics(fresh || []);
     }
@@ -228,28 +220,24 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
       return copy;
     });
   }
-  
+
   async function handleDeleteTopic(topicId) {
-  const ok = window.confirm("Are you sure you want to delete this topic?");
-  if (!ok) return;
+    const ok = window.confirm("Are you sure you want to delete this topic?");
+    if (!ok) return;
 
-  const { error } = await supabase
-    .from("topics")
-    .delete()
-    .eq("id", topicId)
-    .eq("user_id", userId);
+    const { error } = await supabase
+      .from("topics")
+      .delete()
+      .eq("id", topicId)
+      .eq("user_id", studentId);
 
-  if (error) {
-    alert("Error deleting topic: " + error.message);
-    return;
+    if (error) {
+      alert("Error deleting topic: " + error.message);
+      return;
+    }
+
+    setTopics((prev) => prev.filter((topic) => topic.id !== topicId));
   }
-
-  setTopics((prev) => prev.filter((topic) => topic.id !== topicId));
-
-  if (selectedTopic?.id === topicId) {
-    setSelectedTopic(null);
-  }
-}
 
   return (
     <div
@@ -269,70 +257,75 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
           marginBottom: "12px",
         }}
       >
-        <div>
+                <div>
           <h1
             style={{
               fontSize: "2.4rem",
               fontWeight: 800,
-              lineHeight: 1.1,
-              marginBottom: "4px",
+              margin: 0,
             }}
           >
-            Pre-Entrance Research Dashboard
+            Research Start App
           </h1>
-          <p style={{ margin: 0, fontSize: "0.95rem", color: "#555" }}>
-            Step 2: Decide your research question, then create a research plan
-            and 10 article titles.
+
+          <p style={{ margin: "4px 0 0 0", color: "#666", fontSize: "0.9rem" }}>
+            Developed by Hitoshi Eguchi @ Hokusei Gakuen University
+          </p>
+
+          <p style={{ margin: "4px 0 0 0", color: "#555", fontSize: "0.95rem" }}>
+            {studentName} ({studentId})
           </p>
         </div>
-        {onLogout && (
-          <button
-            type="button"
-            onClick={onLogout}
-            style={{
-              padding: "6px 12px",
-              fontSize: "0.9rem",
-              borderRadius: "6px",
-              border: "1px solid #ddd",
-              cursor: "pointer",
-            }}
-          >
-            Logout
-          </button>
-        )}
+
+        <button
+          type="button"
+          onClick={onLogout}
+          style={{
+            padding: "8px 16px",
+            borderRadius: "999px",
+            border: "1px solid #ddd",
+            background: "#fafafa",
+            cursor: "pointer",
+            fontSize: "0.9rem",
+          }}
+        >
+          Log out
+        </button>
       </div>
 
-      {/* Stage 1 description */}
-      <p style={{ marginBottom: "24px" }}>
-        <strong>Stage 1.</strong> First, decide your research topic. Then give a
-        few keywords so AI can suggest possible research questions. Choose one,
-        edit the English, and save it as your topic.
+      <hr style={{ marginBottom: "20px", borderColor: "#e5e7eb" }} />
+
+      {/* Stage 1 */}
+      <p style={{ marginBottom: "8px" }}>
+        <strong>Stage 1.</strong> Enter a topic title and optional keywords, then ask AI
+        for research question ideas.
       </p>
 
-      {/* TOPIC TITLE */}
       <label style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
-        Topic title (short phrase)
+        Topic Title
       </label>
       <input
         type="text"
-        placeholder="Examples: Jazz in Japan, Anime tourism, Coffee shops in Sapporo"
+        placeholder="e.g. classical music"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         style={{
           width: "100%",
           padding: "10px",
-          marginBottom: "16px",
+          marginBottom: "12px",
           fontSize: "16px",
+          borderRadius: "8px",
+          border: "1px solid #ccc",
+          boxSizing: "border-box",
         }}
       />
 
-      {/* KEYWORDS */}
       <label style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
-        Keywords (to help AI)
+        Keywords (optional)
       </label>
       <input
         type="text"
-        placeholder="Give 3–5 keywords, separated by commas."
+        placeholder="e.g. emotion, brain, therapy"
         value={keywords}
         onChange={(e) => setKeywords(e.target.value)}
         style={{
@@ -340,6 +333,9 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
           padding: "10px",
           marginBottom: "12px",
           fontSize: "16px",
+          borderRadius: "8px",
+          border: "1px solid #ccc",
+          boxSizing: "border-box",
         }}
       />
 
@@ -421,13 +417,16 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
             height: "90px",
             marginBottom: "16px",
             fontSize: "16px",
+            borderRadius: "8px",
+            border: "1px solid #ccc",
+            boxSizing: "border-box",
           }}
         />
 
         <p style={{ marginBottom: "8px" }}>
-          <strong>Stage 2.</strong> After you decide your final research
-          question, ask AI to create a short research plan and 10 article
-          titles. You can edit them and then save everything.
+          <strong>Stage 2.</strong> After you decide your final research question, ask AI
+          to create a short research plan and 10 article titles. You can edit them and
+          then save everything.
         </p>
 
         <button
@@ -445,9 +444,7 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
             cursor: "pointer",
           }}
         >
-          {loadingPlan
-            ? "Generating Article Plan..."
-            : "Generate Article Plan (10 Titles)"}
+          {loadingPlan ? "Generating Article Plan..." : "Generate Article Plan (10 Titles)"}
         </button>
 
         {planError && (
@@ -475,6 +472,9 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
                 height: "80px",
                 marginBottom: "12px",
                 fontSize: "15px",
+                borderRadius: "8px",
+                border: "1px solid #ccc",
+                boxSizing: "border-box",
               }}
             />
 
@@ -492,6 +492,9 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
                       width: "100%",
                       padding: "6px 8px",
                       fontSize: "14px",
+                      borderRadius: "6px",
+                      border: "1px solid #ccc",
+                      boxSizing: "border-box",
                     }}
                   />
                 </li>
@@ -577,33 +580,6 @@ export default function Dashboard({ user, onLogout, onGoToStage3 }) {
             </li>
           ))}
         </ul>
-      )}
-
-      {selectedTopic && (
-        <div
-          style={{
-            marginTop: "24px",
-            paddingTop: "16px",
-            borderTop: "1px solid #e5e7eb",
-          }}
-        >
-          <h2 style={{ fontSize: "1.4rem", marginBottom: "8px" }}>
-            Stage 3 (Preview) – {selectedTopic.title}
-          </h2>
-
-          <p style={{ marginBottom: "8px" }}>Final research question:</p>
-
-          <p
-            style={{
-              marginBottom: "12px",
-              padding: "8px 10px",
-              backgroundColor: "#f3f4f6",
-              borderRadius: "6px",
-            }}
-          >
-            {selectedTopic.research_topic || "No research question saved yet."}
-          </p>
-        </div>
       )}
     </div>
   );

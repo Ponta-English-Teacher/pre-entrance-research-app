@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
-import { supabase } from "./supabaseClient";
 import LoginPage from "./pages/Login";
 import Dashboard from "./Dashboard";
 import Stage3Screen from "./pages/Stage3Screen";
 import Stage4Screen from "./pages/Stage4Screen";
 
+/**
+ * Student identity is now { studentId: string, studentName: string }.
+ * No Supabase Auth — identity is stored in localStorage.
+ */
 function App() {
-  const [user, setUser] = useState(null);
+  // null means "not identified yet"; { studentId, studentName } means "active"
+  const [student, setStudent] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // which topic has moved to Stage 3
@@ -15,45 +19,35 @@ function App() {
   // which topic has moved to Stage 4
   const [stage4Topic, setStage4Topic] = useState(null);
 
-  // Check existing session when the app starts
+  // Restore identity from localStorage on first load
   useEffect(() => {
-    async function getSession() {
-      const { data, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error("Error getting session:", error.message);
-      }
-      setUser(data?.session?.user ?? null);
-      setLoading(false);
+    const id = localStorage.getItem("student_id");
+    const name = localStorage.getItem("student_name");
+    if (id && name) {
+      setStudent({ studentId: id, studentName: name });
     }
-
-    getSession();
-
-    // Listen for login / logout
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    setLoading(false);
   }, []);
+
+  function handleAuthSuccess({ studentId, studentName }) {
+    setStudent({ studentId, studentName });
+    setStage3Topic(null);
+    setStage4Topic(null);
+  }
 
   function handleGoToStage3(topic) {
     setStage3Topic(topic);
-    setStage4Topic(null); // ensure Stage 4 is not active
+    setStage4Topic(null);
   }
 
   function handleGoToStage4(topic) {
-    // keep stage3Topic so user can go back to Stage 3 later
     setStage4Topic(topic);
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    setUser(null);
+  function handleLogout() {
+    localStorage.removeItem("student_id");
+    localStorage.removeItem("student_name");
+    setStudent(null);
     setStage3Topic(null);
     setStage4Topic(null);
   }
@@ -74,37 +68,42 @@ function App() {
     );
   }
 
-  // Not logged in → show login page
-  if (!user) {
-    return <LoginPage />;
+  // Not identified → show login/entry page
+  if (!student) {
+    return <LoginPage onAuthSuccess={handleAuthSuccess} />;
   }
 
-  // If Stage 4 is active → show Stage 4 screen
+  // Stage 4 active
   if (stage4Topic) {
     return (
       <Stage4Screen
         topic={stage4Topic}
-        onBack={() => setStage4Topic(null)} // back to Stage 3
+        onBack={() => setStage4Topic(null)}
         onLogout={handleLogout}
       />
     );
   }
 
-// If a topic is chosen for Stage 3 → show Stage 3 screen
-if (stage3Topic) {
-  return (
-    <Stage3Screen
-      topic={stage3Topic}
-      onBack={() => setStage3Topic(null)}
-      onLogout={handleLogout}
-      onNextStage={handleGoToStage4}
-    />
-  );
-}
+  // Stage 3 active
+  if (stage3Topic) {
+    return (
+      <Stage3Screen
+        topic={stage3Topic}
+        onBack={() => setStage3Topic(null)}
+        onLogout={handleLogout}
+        onNextStage={handleGoToStage4}
+      />
+    );
+  }
 
-  // Logged in & not in Stage 3/4 → show dashboard
+  // Dashboard
   return (
-    <Dashboard user={user} onLogout={handleLogout} onGoToStage3={handleGoToStage3} />
+    <Dashboard
+      studentId={student.studentId}
+      studentName={student.studentName}
+      onLogout={handleLogout}
+      onGoToStage3={handleGoToStage3}
+    />
   );
 }
 

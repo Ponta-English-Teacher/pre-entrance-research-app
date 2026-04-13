@@ -1,63 +1,41 @@
 import { useState } from 'react';
-import { supabase } from '../supabaseClient';
 
 /**
- * Simple login / sign-up component for students.
- * - Uses email + password
- * - Can create a new account (Sign up)
- * - Can log in to an existing account (Log in)
- * - Calls onAuthSuccess() when login succeeds (App will use this later)
+ * Student entry screen.
+ * No email/password. Students enter:
+ *   - Student ID  (e.g. s12345)
+ *   - Display name (e.g. Tanaka Yuki)
+ *
+ * Identity is stored in localStorage so students can return later.
+ * onAuthSuccess({ studentId, studentName }) is called on submit.
  */
 function Login({ onAuthSuccess }) {
-  const [mode, setMode] = useState('login'); // 'login' or 'signup'
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [message, setMessage] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [studentId, setStudentId] = useState('');
+  const [studentName, setStudentName] = useState('');
+  const [error, setError] = useState('');
 
-  const handleAuth = async (event) => {
-    event.preventDefault();
-    setLoading(true);
-    setMessage('');
+  function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
 
-    try {
-      if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
+    const id = studentId.trim();
+    const name = studentName.trim();
 
-        if (error) {
-          throw error;
-        }
-
-        setMessage(
-          '✅ Sign up successful. Please check your email if confirmation is required, then log in.'
-        );
-      } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (error) {
-          throw error;
-        }
-
-        setMessage('✅ Logged in successfully.');
-
-        // Notify parent (App) if provided
-        if (onAuthSuccess) {
-          onAuthSuccess(data.session);
-        }
-      }
-    } catch (err) {
-      console.error('Auth error:', err);
-      setMessage('❌ ' + (err.message || 'Authentication error'));
-    } finally {
-      setLoading(false);
+    if (!id) {
+      setError('Please enter your Student ID.');
+      return;
     }
-  };
+    if (!name) {
+      setError('Please enter your name.');
+      return;
+    }
+
+    // Persist so the browser remembers on next visit
+    localStorage.setItem('student_id', id);
+    localStorage.setItem('student_name', name);
+
+    onAuthSuccess({ studentId: id, studentName: name });
+  }
 
   return (
     <div
@@ -83,12 +61,22 @@ function Login({ onAuthSuccess }) {
         <h1
           style={{
             fontSize: '1.5rem',
-            marginBottom: '0.5rem',
+            marginBottom: '0.3rem',
             textAlign: 'center',
           }}
         >
-          Pre-Entrance Research App
+          Research Start App
         </h1>
+        <p
+          style={{
+            fontSize: '0.9rem',
+            marginBottom: '1.5rem',
+            textAlign: 'center',
+            color: '#666',
+          }}
+        >
+          Developed by Hitoshi Eguchi @ Hokusei Gakuen University
+        </p>
         <p
           style={{
             fontSize: '0.95rem',
@@ -97,26 +85,26 @@ function Login({ onAuthSuccess }) {
             color: '#555',
           }}
         >
-          {mode === 'login'
-            ? 'Log in with your email to continue your research.'
-            : 'Create your account to start your research project.'}
+          Enter your student ID and name to continue your research project.
         </p>
 
-        <form onSubmit={handleAuth}>
+        <form onSubmit={handleSubmit}>
           <label
             style={{
               display: 'block',
               fontSize: '0.9rem',
               marginBottom: '0.25rem',
+              fontWeight: 600,
             }}
           >
-            Email
+            Student ID
           </label>
           <input
-            type="email"
+            type="text"
             required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            placeholder="e.g. s12345"
+            value={studentId}
+            onChange={(e) => setStudentId(e.target.value)}
             style={{
               width: '100%',
               padding: '0.5rem 0.75rem',
@@ -124,6 +112,7 @@ function Login({ onAuthSuccess }) {
               borderRadius: '8px',
               border: '1px solid #ccc',
               fontSize: '0.95rem',
+              boxSizing: 'border-box',
             }}
           />
 
@@ -132,16 +121,17 @@ function Login({ onAuthSuccess }) {
               display: 'block',
               fontSize: '0.9rem',
               marginBottom: '0.25rem',
+              fontWeight: 600,
             }}
           >
-            Password
+            Your Name
           </label>
           <input
-            type="password"
+            type="text"
             required
-            minLength={6}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            placeholder="e.g. Tanaka Yuki"
+            value={studentName}
+            onChange={(e) => setStudentName(e.target.value)}
             style={{
               width: '100%',
               padding: '0.5rem 0.75rem',
@@ -149,12 +139,12 @@ function Login({ onAuthSuccess }) {
               borderRadius: '8px',
               border: '1px solid #ccc',
               fontSize: '0.95rem',
+              boxSizing: 'border-box',
             }}
           />
 
           <button
             type="submit"
-            disabled={loading}
             style={{
               width: '100%',
               padding: '0.6rem',
@@ -162,49 +152,25 @@ function Login({ onAuthSuccess }) {
               border: 'none',
               fontSize: '1rem',
               fontWeight: '600',
-              cursor: loading ? 'default' : 'pointer',
-              background: loading ? '#999' : '#2563eb',
+              cursor: 'pointer',
+              background: '#2563eb',
               color: '#fff',
               marginBottom: '0.75rem',
             }}
           >
-            {loading
-              ? 'Please wait...'
-              : mode === 'login'
-              ? 'Log In'
-              : 'Sign Up'}
+            Start / Continue Research
           </button>
         </form>
 
-        <button
-          type="button"
-          onClick={() =>
-            setMode((prev) => (prev === 'login' ? 'signup' : 'login'))
-          }
-          style={{
-            width: '100%',
-            padding: '0.5rem',
-            borderRadius: '999px',
-            border: '1px solid #ddd',
-            background: '#fafafa',
-            fontSize: '0.9rem',
-            cursor: 'pointer',
-          }}
-        >
-          {mode === 'login'
-            ? "Don't have an account? Sign up"
-            : 'Already have an account? Log in'}
-        </button>
-
-        {message && (
+        {error && (
           <p
             style={{
-              marginTop: '0.75rem',
+              marginTop: '0.5rem',
               fontSize: '0.9rem',
-              color: message.startsWith('✅') ? '#15803d' : '#b91c1c',
+              color: '#b91c1c',
             }}
           >
-            {message}
+            ❌ {error}
           </p>
         )}
       </div>
